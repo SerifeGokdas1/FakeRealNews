@@ -10,27 +10,44 @@ from sklearn.metrics import accuracy_score, confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
 import streamlit as st
+import re
 
-# PKL dosyasını yüklemek için cache
+# FastText tüm vektörlerini yüklemek için cache
 @st.cache_resource
-def load_fasttext_vectors():
+def load_full_fasttext_vectors():
     with open("fasttext_vectors.pkl", "rb") as file:
-        data = pickle.load(file)
-    return data
+        full_word_vectors = pickle.load(file)  # Tüm kelime vektörlerini yükle
+    return full_word_vectors
 
-# Veri ve kelime vektörlerini yükleme
-word_vectors, y = load_fasttext_vectors()
-X = np.array(list(word_vectors.values()))
-y = np.array(y)
+# Orijinal FastText vektörleri (2 milyon kelime)
+full_word_vectors = load_full_fasttext_vectors()
+
+# PKL dosyasını yüklemek için cache (eğitim verisi)
+@st.cache_resource
+def load_fasttext_dataset():
+    with open("fasttext_vectors.pkl", "rb") as file:
+        X, y = pickle.load(file)
+    return np.array(X), np.array(y)
+
+# Veri ve etiketleri yükleme
+X, y = load_fasttext_dataset()
+
+# Metin ön işleme fonksiyonu
+def preprocess_text(text):
+    text = text.lower()
+    text = re.sub(r"\d", "", text)  # Rakamları kaldır
+    text = re.sub(r"[\'\",\.\?\!\(\)\-]", "", text)  # Noktalama işaretlerini kaldır
+    text = re.sub(r"\s+", " ", text).strip()  # Fazladan boşlukları kaldır
+    return text
 
 # Haber başlığını vektörleştirme
-def vectorize_input(user_input, word_vectors, embedding_dim=300):
+def vectorize_input(user_input, full_word_vectors, embedding_dim=300):
     tokens = user_input.lower().split()
     vectorized_input = np.zeros(embedding_dim)
     count = 0
     for word in tokens:
-        if word in word_vectors:
-            vectorized_input += word_vectors[word]
+        if word in full_word_vectors:
+            vectorized_input += full_word_vectors[word]
             count += 1
     if count == 0:
         st.error("Girilen başlık, vektörler içinde eşleşen kelimeler içermiyor. Daha farklı bir başlık giriniz.")
@@ -64,11 +81,21 @@ classifier_name = st.selectbox(
     ["Logistic Regression", "Random Forest", "XGBoost", "KMeans"]
 )
 
-if user_input:
+# Tahmin butonu
+tahmin_butonu = st.button("Tahmini Yap")
+
+if tahmin_butonu and user_input:
+    # Haber başlığını ön işleme
+    preprocessed_input = preprocess_text(user_input)
+
     # Haber başlığını vektörleştir
-    embedding_dim = 300  # Embedding boyutu
-    vectorized_input = vectorize_input(user_input, word_vectors, embedding_dim)
-    vectorized_input = vectorized_input.reshape(1, -1)
+    embedding_dim = 300  # FastText'in sabit boyutlu vektör boyutu
+    vectorized_input = vectorize_input(preprocessed_input, full_word_vectors, embedding_dim)
+
+    if vectorized_input is not None:  # None döndüyse işlem yapma
+        vectorized_input = vectorized_input.reshape(1, -1)
+    else:
+        st.stop()  # Hata durumunda uygulamayı durdur
 
     # Model seçimi ve tahmin
     models = {
