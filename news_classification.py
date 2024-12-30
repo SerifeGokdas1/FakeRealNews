@@ -32,6 +32,9 @@ def vectorize_input(user_input, word_vectors, embedding_dim=300):
         if word in word_vectors:
             vectorized_input += word_vectors[word]
             count += 1
+    if count == 0:
+        st.error("Girilen başlık, vektörler içinde eşleşen kelimeler içermiyor. Daha farklı bir başlık giriniz.")
+        return None
     return vectorized_input / count if count > 0 else vectorized_input
 
 # Veri setini ayırma
